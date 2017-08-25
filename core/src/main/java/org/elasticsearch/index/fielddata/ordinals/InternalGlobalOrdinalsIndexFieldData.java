@@ -34,7 +34,7 @@ import java.util.Collection;
 final class InternalGlobalOrdinalsIndexFieldData extends GlobalOrdinalsIndexFieldData {
 
     private final Atomic[] atomicReaders;
-    private final RandomAccessOrds[] bytesValues;
+    private ThreadLocal<RandomAccessOrds[]> threadLocal = new ThreadLocal<>();
 
     InternalGlobalOrdinalsIndexFieldData(IndexSettings indexSettings, String fieldName, AtomicOrdinalsFieldData[] segmentAfd, OrdinalMap ordinalMap, long memorySizeInBytes) {
         super(indexSettings, fieldName, memorySizeInBytes);
@@ -42,12 +42,14 @@ final class InternalGlobalOrdinalsIndexFieldData extends GlobalOrdinalsIndexFiel
         for (int i = 0; i < segmentAfd.length; i++) {
             atomicReaders[i] = new Atomic(segmentAfd[i], ordinalMap, i);
         }
+    }
+
+    public RandomAccessOrds[] fooBar(){
         final RandomAccessOrds[] bytesValues = new RandomAccessOrds[atomicReaders.length];
         for (int i = 0; i < bytesValues.length; i++) {
             bytesValues[i] = atomicReaders[i].afd.getOrdinalsValues();
         }
-        this.bytesValues=bytesValues;
-
+        return bytesValues;
     }
 
     @Override
@@ -74,7 +76,11 @@ final class InternalGlobalOrdinalsIndexFieldData extends GlobalOrdinalsIndexFiel
                 // segment ordinals match global ordinals
                 return values;
             }
-            return new GlobalOrdinalMapping(ordinalMap, bytesValues, segmentIndex);
+            RandomAccessOrds[] bytesValues = threadLocal.get();
+            if (bytesValues==null){
+                threadLocal.set(fooBar());
+            }
+            return new GlobalOrdinalMapping(ordinalMap, threadLocal.get(), segmentIndex);
         }
 
         @Override
