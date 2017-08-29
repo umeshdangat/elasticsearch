@@ -36,20 +36,25 @@ final class InternalGlobalOrdinalsIndexFieldData extends GlobalOrdinalsIndexFiel
     private final Atomic[] atomicReaders;
     private ThreadLocal<RandomAccessOrds[]> threadLocal = new ThreadLocal<>();
 
+    // per instance per thread globalOrdinalValues
+    private final ThreadLocal<RandomAccessOrds[]> globalOrdinalValues =
+            new ThreadLocal<RandomAccessOrds[]>() {
+                @Override
+                protected RandomAccessOrds[] initialValue() {
+                    final RandomAccessOrds[] bytesValues = new RandomAccessOrds[atomicReaders.length];
+                    for (int i = 0; i < bytesValues.length; i++) {
+                        bytesValues[i] = atomicReaders[i].afd.getOrdinalsValues();
+                    }
+                    return bytesValues;
+                }
+            };
+
     InternalGlobalOrdinalsIndexFieldData(IndexSettings indexSettings, String fieldName, AtomicOrdinalsFieldData[] segmentAfd, OrdinalMap ordinalMap, long memorySizeInBytes) {
         super(indexSettings, fieldName, memorySizeInBytes);
         this.atomicReaders = new Atomic[segmentAfd.length];
         for (int i = 0; i < segmentAfd.length; i++) {
             atomicReaders[i] = new Atomic(segmentAfd[i], ordinalMap, i);
         }
-    }
-
-    public RandomAccessOrds[] fooBar(){
-        final RandomAccessOrds[] bytesValues = new RandomAccessOrds[atomicReaders.length];
-        for (int i = 0; i < bytesValues.length; i++) {
-            bytesValues[i] = atomicReaders[i].afd.getOrdinalsValues();
-        }
-        return bytesValues;
     }
 
     @Override
@@ -76,11 +81,7 @@ final class InternalGlobalOrdinalsIndexFieldData extends GlobalOrdinalsIndexFiel
                 // segment ordinals match global ordinals
                 return values;
             }
-            RandomAccessOrds[] bytesValues = threadLocal.get();
-            if (bytesValues==null){
-                threadLocal.set(fooBar());
-            }
-            return new GlobalOrdinalMapping(ordinalMap, threadLocal.get(), segmentIndex);
+            return new GlobalOrdinalMapping(ordinalMap, globalOrdinalValues.get(), segmentIndex);
         }
 
         @Override
